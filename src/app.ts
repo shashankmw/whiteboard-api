@@ -1,7 +1,6 @@
-/*
-    Load env file based on run command.
-    Look at the package.json file, the script to run the server passes a variable named NODE_ENV using the cross-env package. We use the variable to determine which env file to call -> either .env.production or .env.development
-*/
+/* eslint-disable @typescript-eslint/no-misused-promises */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
+
 import * as dotenv from "dotenv";
 if (!process.env.NODE_ENV) {
     dotenv.config({ path: `.env.production` });
@@ -15,27 +14,31 @@ import cors from "cors"; // cors is for cross origin resource sharing.
 import morgan from "morgan"; // morgan is for better logging of each request
 import express from "express"; // express is the framework for the backend
 import swaggerUi from "swagger-ui-express"; // swagger is the package we use for better documentation of the api
+import { Server } from "socket.io";
+import { createServer } from "http";
+
 
 // Import custom packages we'll be using
 import {
     connect,
-    getConnectionState,
+    // getConnectionState,
     isValidConnectionURI,
 } from "./config/db.config"; // has code to establish connection the mongo db
 import { swaggerSpec } from "./config/swagger.config"; // has configuration for swagger
 import { mainRouter } from "./routes/main.route";
-import { logger } from "./utils/logger.util";
+import { socketIO } from "./controllers/socket.controller";
+// import { logger } from "./utils/logger.util";
 
 // Import variables for the env file.
 const PROJECT_NAME = String(process.env.PROJECT_NAME);
 const MONGO_URI = String(process.env.CONNECTION_URI);
-const BASE_URL = String(process.env.BASE_URL) || "http://127.0.0.1";
+// const BASE_URL = String(process.env.BASE_URL) || "http://127.0.0.1";
 const PORT = Number(process.env.PORT);
 
 // Check MongoDB connection string format
 if (!isValidConnectionURI(MONGO_URI)) {
     // tslint:disable-next-line:no-console
-    console.log("Error: Invalid MongoDB Connection URI");
+    // console.log("Error: Invalid MongoDB Connection URI");
     process.exit(0);
 }
 
@@ -71,23 +74,14 @@ app.get("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Add grouped routes to the express app from ./routes/main.route.ts
 app.use("/", mainRouter);
 
+// socketIO
+const server = createServer();
+const io = new Server(server, { cors: { origin: process.env.BASE_URL } });
+io.on("connection", socketIO);
+
 // Start the express server in the defined port, this too uses a callback function which we have written right inside.
 app.listen(PORT, async () => {
-    const db = await connect(MONGO_URI); // connect to the mongo instance
-
-    // Logging for dev and prod environments
-    if (String(process.env.NODE_ENV) !== "test") {
-        // tslint:disable-next-line:no-console
-        console.log(
-            `${getConnectionState(db.connection.readyState)} to the database`
-        );
-
-        // tslint:disable-next-line:no-console
-        console.log(`Listening on ${BASE_URL}:${PORT}...`);
-        logger.info(`Listening on ${BASE_URL}:${PORT}...`);
-    }
-
-    // Emit ready state
+    await connect(MONGO_URI); 
     app.emit("ready");
 });
 
